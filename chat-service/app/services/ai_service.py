@@ -1,4 +1,5 @@
 import httpx
+
 from app.settings import get_settings
 
 
@@ -30,7 +31,7 @@ class AIService:
         async with httpx.AsyncClient(timeout=120) as client:
 
             response = await client.post(
-                self.settings.ai_service_url,
+                f"{self.settings.ai_service_url}/api/v1/chat",
                 json=payload,
             )
 

@@ -1,0 +1,20 @@
+line-length = 88
+target-version = "py312"
+
+[lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+]
+
+ignore = [
+    "E501",
+    # FastAPI declares Form/File/Depends defaults in the signature by design.
+    "B008",
+]
+
+fixable = ["ALL"]

@@ -1,21 +1,21 @@
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.services.ai_service import AIService
-from app.services.azure_blob import AzureBlobService
+from app.services.factory import StorageFactory
 
 router = APIRouter(
     prefix="/chat",
     tags=["Chat"],
 )
 
-azure_service = AzureBlobService()
+storage_service = StorageFactory.get_provider()
 ai_service = AIService()
 
 
 @router.post("")
 async def chat(
     question: str = Form(...),
-    model: str = Form("gpt-oss:20b"),
+    model: str = Form("gpt-4o-mini"),
     top_k: int = Form(5),
     temperature: float = Form(0.2),
     top_p: float = Form(0.9),
@@ -27,10 +27,10 @@ async def chat(
 
     uploaded_files = []
 
-    # Upload every file to Azure
+    # Upload every file to object storage
     for file in files:
 
-        uploaded_file = await azure_service.upload_file(file)
+        uploaded_file = await storage_service.upload_file(file)
 
         uploaded_files.append(uploaded_file)
 

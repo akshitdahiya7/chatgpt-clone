@@ -10,12 +10,13 @@ on:
       - "gateway/**"
       - "chat-service/**"
       - "ai-service/**"
+      - ".github/workflows/backend.yml"
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
+
   build-and-push:
 
     runs-on: ubuntu-latest
@@ -28,60 +29,53 @@ jobs:
           - chat-service
           - ai-service
 
-    defaults:
-      run:
-        working-directory: ${{ matrix.service }}
-
     steps:
 
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          python-version: "3.12"
 
-      - name: Verify Azure Login
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service }}
+        run: uv sync
+
+      - name: Lint
+        working-directory: ${{ matrix.service }}
+        run: uv run ruff check app/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:latest
+          # Cache layers in GitHub Actions so dependency installs are not
+          # repeated on every run.
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Summary
         run: |
-          az account show
-          az acr show --name ${{ secrets.ACR_NAME }}
-          az acr repository list --name ${{ secrets.ACR_NAME }} || true
-
-      - name: Login to Azure Container Registry
-        run: |
-          az acr login --name ${{ secrets.ACR_NAME }}
-        
-      - name: Verify registry
-        run: |
-          echo "Registry from Azure:"
-          az acr show \
-            --name ${{ secrets.ACR_NAME }} \
-            --query loginServer \
-            -o tsv
-
-          echo
-          echo "Docker auths:"
-          cat ~/.docker/config.json
-
-          echo
-          echo "Docker images:"
-          docker images
-
-      - name: Build Docker Image
-        run: |
-          docker build \
-            -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }} \
-            -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:latest \
-            .
-
-      - name: Show Docker Images
-        run: |
-          docker images
-
-      - name: Push Docker Images
-        run: |
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }}
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:latest
+          echo "Pushed ${{ matrix.service }}:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:latest\`" >> $GITHUB_STEP_SUMMARY

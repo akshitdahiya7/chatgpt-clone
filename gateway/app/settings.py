@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     
     env: str = "DEV"
     port: int = 8000
-    mongodb_uri: str
+    # Reserved for the future persistence layer; nothing reads it yet.
+    mongodb_uri: str = ""
 
     chat_service: str
 

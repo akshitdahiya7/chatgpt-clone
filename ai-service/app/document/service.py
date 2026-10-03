@@ -1,5 +1,5 @@
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 from app.document.chunkers.factory import ChunkerFactory
 from app.document.factory import DocumentFactory
@@ -39,27 +39,29 @@ class IngestionService:
 
         chunks = chunker.split(pages)
 
-        documents = []
+        if not chunks:
+            return 0
 
-        for chunk in chunks:
+        # One request per batch of chunks, not one request per chunk.
+        embeddings = self.embedding_service.embed_batch(
+            [chunk.text for chunk in chunks]
+        )
 
-            embedding = self.embedding_service.embed(
-                chunk.text
+        documents = [
+            VectorDocument(
+                id=f"{document_id}_{chunk.index}",
+                user_id=user_id,
+                document_id=document_id,
+                chunk_index=chunk.index,
+                page=chunk.page,
+                content=chunk.text,
+                embedding=embedding,
             )
+            # strict=True so a length mismatch raises instead of silently
+            # dropping chunks.
+            for chunk, embedding in zip(chunks, embeddings, strict=True)
+        ]
 
-            documents.append(
-                VectorDocument(
-                    id=f"{document_id}_{chunk.index}",
-                    user_id=user_id,
-                    document_id=document_id,
-                    chunk_index=chunk.index,
-                    page=chunk.page,
-                    content=chunk.text,
-                    embedding=embedding,
-                )
-            )
-
-        if documents:
-            self.vector_store.upsert(documents)
+        self.vector_store.upsert(documents)
 
         return len(documents)

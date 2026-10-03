@@ -1,0 +1,32 @@
+services:
+
+  ai-service:
+    build: ./ai-service
+    env_file: ./ai-service/.env
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+  chat-service:
+    build: ./chat-service
+    env_file: ./chat-service/.env
+    environment:
+      # Overrides the localhost value in .env: inside the compose network,
+      # services reach each other by service name.
+      AI_SERVICE_URL: http://ai-service:8002
+    ports:
+      - "8001:8001"
+    depends_on:
+      - ai-service
+    restart: unless-stopped
+
+  gateway:
+    build: ./gateway
+    env_file: ./gateway/.env
+    environment:
+      CHAT_SERVICE: http://chat-service:8001
+    ports:
+      - "8000:8000"
+    depends_on:
+      - chat-service
+    restart: unless-stopped

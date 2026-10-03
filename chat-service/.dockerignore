@@ -1,0 +1,27 @@
+# Secrets — never bake these into an image
+.env
+.env.*
+!.env.example
+
+# Virtual environments (also shadows the uv-managed env)
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# VCS and tooling
+.git/
+.gitignore
+.github/
+.devcontainer/
+
+# Docker
+Dockerfile
+.dockerignore

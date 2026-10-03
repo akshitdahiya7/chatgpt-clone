@@ -1,5 +1,5 @@
-from fastapi import APIRouter
 import httpx
+from fastapi import APIRouter
 
 from app.api.schemas.chat import ChatRequest, ChatResponse
 from app.settings import get_settings

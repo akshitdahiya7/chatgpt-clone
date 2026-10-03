@@ -1,1 +1,3 @@
-from .azure_ai_search import AzureAISearchVectorStore
+from .opensearch import OpenSearchVectorStore
+
+__all__ = ["OpenSearchVectorStore"]

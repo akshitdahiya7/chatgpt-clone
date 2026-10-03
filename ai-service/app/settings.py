@@ -4,6 +4,8 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
@@ -13,32 +15,47 @@ class Settings(BaseSettings):
 
     name: str = "AI Service"
     version: str = "0.1.0"
-    
+
     env: str = "DEV"
     port: int = 8002
-    mongodb_uri: str
 
+    # Chunking
     rag_chunk_strategy: str = "fixed"
     rag_chunk_size: int = 1000
     rag_chunk_overlap: int = 200
 
-    embedding_provider: str = "huggingface"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    embedding_batch_size: int = 32
+    # Embeddings: "openai" calls the API, "huggingface" runs locally
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_batch_size: int = 128
 
-    vector_store_provider: str = "azure"
-    azure_search_endpoint: str
-    azure_search_key: str
-    azure_search_index: str = "documents"
-    embedding_dimension: int = 384
-    
-    llm_provider: str = "ollama"
-    llm_model: str = "qwen3:4b"
+    # Vector store
+    vector_store_provider: str = "opensearch"
+    vector_index_name: str = "documents"
+
+    # Must match what the embedding provider returns, and cannot change once
+    # the index exists. text-embedding-3-small=1536, all-MiniLM-L6-v2=384.
+    embedding_dimension: int = 1536
+
+    # OpenSearch: host only, without the https:// prefix
+    opensearch_host: str = ""
+    opensearch_user: str = ""
+    opensearch_password: str = ""
+
+    # LLM: "openai" or "ollama"
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.2
     llm_top_p: float = 1.0
-    
-    ollama_base_url: str
-    ollama_api_key: str
+
+    # Shared by the OpenAI embedding and LLM providers.
+    # Leave base_url empty for OpenAI itself.
+    openai_api_key: str = ""
+    openai_base_url: str = ""
+
+    # Only for llm_provider="ollama"
+    ollama_base_url: str = ""
+    ollama_api_key: str = ""
 
 
 @lru_cache

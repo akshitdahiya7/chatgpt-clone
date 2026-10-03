@@ -10,22 +10,22 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Application
     name: str = "Chat Service"
     version: str = "0.1.0"
 
-    # Server
     env: str = "DEV"
     host: str = "0.0.0.0"
     port: int = 8001
 
-    # Azure Blob Storage
-    azure_storage_account_name: str
-    azure_storage_account_key: str
-    azure_storage_container_name: str
-    azure_storage_connection_string: str
+    # Storage
+    storage_provider: str = "s3"
+    s3_bucket_name: str = ""
 
-    # AI Service
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+
+    # Downstream service
     ai_service_url: str
 
 

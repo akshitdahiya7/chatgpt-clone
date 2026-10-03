@@ -1,4 +1,5 @@
 from app.llm.factory import LLMFactory
+from app.llm.models import LLMResponse
 from app.prompt.models import Prompt
 
 
@@ -9,24 +10,24 @@ class LLMService:
 
     def generate(
         self,
-        prompt: str,
+        prompt: Prompt,
         model: str,
         temperature: float,
         max_tokens: int,
         top_p: float,
-    ):
-        
+    ) -> LLMResponse:
+
         return self.provider.generate(
             prompt=prompt,
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
-            top_p=top_p
+            top_p=top_p,
         )
 
     def stream(
         self,
-        prompt: str,
+        prompt: Prompt,
         model: str,
         temperature: float,
         max_tokens: int,
@@ -37,5 +38,5 @@ class LLMService:
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
-            top_p=top_p
+            top_p=top_p,
         )
