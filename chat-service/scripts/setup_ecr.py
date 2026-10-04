@@ -12,7 +12,7 @@ from pathlib import Path
 import boto3
 from botocore.exceptions import ClientError
 
-REPOSITORIES = ("gateway", "chat-service", "ai-service")
+REPOSITORIES = ("gateway", "chat-service", "ai-service", "frontend")
 ENV = Path(__file__).resolve().parent.parent / ".env"
 
 

@@ -1,4 +1,4 @@
-name: Backend CI/CD
+name: CI/CD
 
 on:
   workflow_dispatch:
@@ -10,6 +10,7 @@ on:
       - "gateway/**"
       - "chat-service/**"
       - "ai-service/**"
+      - "frontend/**"
       - ".github/workflows/backend.yml"
 
 permissions:
@@ -86,3 +87,59 @@ jobs:
           echo "Pushed ${{ matrix.service }}:" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`${{ steps.ecr.outputs.registry }}/${{ matrix.service }}:latest\`" >> $GITHUB_STEP_SUMMARY
+
+  build-and-push-frontend:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npx eslint app
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          # Empty means the app calls its own origin, which Caddy serves.
+          build-args: |
+            NEXT_PUBLIC_API_URL=
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/frontend:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend

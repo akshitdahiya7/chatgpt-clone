@@ -1,21 +1,19 @@
 # Deployment compose file for EC2: pulls prebuilt images from ECR rather than
-# building on the instance.
+# building on the instance, and puts Caddy in front for HTTPS.
 #
+#   export ECR_REGISTRY=<account>.dkr.ecr.us-east-1.amazonaws.com
+#   export DOMAIN=yourname.duckdns.org
 #   docker compose -f docker-compose.ec2.yml pull
 #   docker compose -f docker-compose.ec2.yml up -d
 #
-# Set ECR_REGISTRY first, e.g.
-#   export ECR_REGISTRY=020200817217.dkr.ecr.us-east-1.amazonaws.com
+# Only Caddy publishes ports. Everything else is reachable solely on the
+# internal compose network.
 
 services:
 
   ai-service:
     image: ${ECR_REGISTRY}/ai-service:latest
     env_file: ./ai-service/.env
-    ports:
-      # Loopback only: nothing outside the instance needs this, and the
-      # container holds the OpenAI key.
-      - "127.0.0.1:8002:8002"
     restart: unless-stopped
 
   chat-service:
@@ -23,9 +21,6 @@ services:
     env_file: ./chat-service/.env
     environment:
       AI_SERVICE_URL: http://ai-service:8002
-    ports:
-      # The only port the frontend calls, so the only one open to the world.
-      - "8001:8001"
     depends_on:
       - ai-service
     restart: unless-stopped
@@ -35,8 +30,32 @@ services:
     env_file: ./gateway/.env
     environment:
       CHAT_SERVICE: http://chat-service:8001
-    ports:
-      - "127.0.0.1:8000:8000"
     depends_on:
       - chat-service
     restart: unless-stopped
+
+  frontend:
+    image: ${ECR_REGISTRY}/frontend:latest
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here. Losing this volume means requesting them again,
+      # and Let's Encrypt rate-limits that.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - chat-service
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

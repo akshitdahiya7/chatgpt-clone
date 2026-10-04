@@ -1,0 +1,24 @@
+# Caddy terminates TLS and serves the whole app from one domain, so the browser
+# never makes a mixed HTTPS/HTTP request and no CORS configuration is needed.
+#
+# DOMAIN comes from docker-compose. Certificates are obtained and renewed from
+# Let's Encrypt automatically.
+
+{$DOMAIN} {
+
+	encode gzip
+
+	# API traffic goes to chat-service.
+	handle /api/* {
+		reverse_proxy chat-service:8001 {
+			# Flush straight through, otherwise streamed answers arrive in
+			# one lump at the end instead of word by word.
+			flush_interval -1
+		}
+	}
+
+	# Everything else is the Next.js app.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
