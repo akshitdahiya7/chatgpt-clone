@@ -12,5 +12,5 @@ class VectorStoreService:
     def upsert(self, docs):
         self.provider.upsert(docs)
 
-    def search(self, query: str, embedding, k):
-        return self.provider.search(query, embedding, k)
+    def search(self, query, embedding, k, user_id, document_ids=None):
+        return self.provider.search(query, embedding, k, user_id, document_ids)

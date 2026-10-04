@@ -1,4 +1,4 @@
-import uuid
+import hashlib
 from pathlib import Path
 
 from app.document.chunkers.factory import ChunkerFactory
@@ -22,15 +22,17 @@ class IngestionService:
         file_path: Path,
         user_id: str = "demo-user",
         document_id: str | None = None,
-    ) -> int:
-
-        # Generate document ID if not provided
-        if document_id is None:
-            document_id = uuid.uuid4().hex
+    ) -> str:
 
         # Read document
         reader = DocumentFactory.get_reader(file_path)
         pages = reader.read(file_path)
+
+        # Derive the id from the content, so re-uploading the same file
+        # overwrites its chunks instead of adding a duplicate copy.
+        if document_id is None:
+            text = "".join(page.text for page in pages)
+            document_id = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
 
         # Chunk document
         chunker = ChunkerFactory.get(
@@ -40,7 +42,7 @@ class IngestionService:
         chunks = chunker.split(pages)
 
         if not chunks:
-            return 0
+            return document_id
 
         # One request per batch of chunks, not one request per chunk.
         embeddings = self.embedding_service.embed_batch(
@@ -57,11 +59,11 @@ class IngestionService:
                 content=chunk.text,
                 embedding=embedding,
             )
-            # strict=True so a length mismatch raises instead of silently
-            # dropping chunks.
             for chunk, embedding in zip(chunks, embeddings, strict=True)
         ]
 
         self.vector_store.upsert(documents)
 
-        return len(documents)
+        print(f"INGESTED {len(documents)} chunks as {document_id}")
+
+        return document_id

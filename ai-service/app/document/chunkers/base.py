@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 
+from app.document.models import DocumentPage
+
 from .models import Chunk
 
 
 class Chunker(ABC):
-    
+
     @abstractmethod
-    def split(self, text: str) -> list[Chunk]:
+    def split(self, pages: list[DocumentPage]) -> list[Chunk]:
         pass

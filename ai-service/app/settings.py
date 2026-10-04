@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     port: int = 8002
 
     # Chunking
-    rag_chunk_strategy: str = "fixed"
+    rag_chunk_strategy: str = "recursive"  # "recursive" | "fixed"
     rag_chunk_size: int = 1000
     rag_chunk_overlap: int = 200
 
@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # Vector store
     vector_store_provider: str = "opensearch"
     vector_index_name: str = "documents"
+
+    # Drop chunks below this score so unrelated text never reaches the model.
+    # Measured on this data: questions the documents can answer score 0.59-0.71,
+    # questions they cannot score 0.49-0.55. Retune if you change the embedding
+    # model or the kind of documents.
+    rag_min_score: float = 0.58
 
     # Must match what the embedding provider returns, and cannot change once
     # the index exists. text-embedding-3-small=1536, all-MiniLM-L6-v2=384.

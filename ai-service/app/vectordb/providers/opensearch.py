@@ -119,7 +119,16 @@ class OpenSearchVectorStore(BaseVectorStore):
         query: str,
         embedding: list[float],
         k: int,
+        user_id: str,
+        document_ids: list[str] | None = None,
     ) -> list[RetrievedChunk]:
+
+        # Always scope to the user. Narrow to specific documents when the
+        # caller asks, which is what happens when files came with the question.
+        filters = [{"term": {"user_id": user_id}}]
+
+        if document_ids:
+            filters.append({"terms": {"document_id": document_ids}})
 
         body = {
             "size": k,
@@ -128,6 +137,7 @@ class OpenSearchVectorStore(BaseVectorStore):
                     "embedding": {
                         "vector": embedding,
                         "k": k,
+                        "filter": {"bool": {"must": filters}},
                     }
                 }
             },
@@ -143,18 +153,13 @@ class OpenSearchVectorStore(BaseVectorStore):
 
         response = self.client.search(index=self.index_name, body=body)
 
-        search_results: list[RetrievedChunk] = []
-
-        for hit in response["hits"]["hits"]:
-            source = hit["_source"]
-            search_results.append(
-                RetrievedChunk(
-                    content=source["content"],
-                    page=source["page"],
-                    document_id=source["document_id"],
-                    # cosinesimil scores land in [0, 1], higher is closer
-                    score=hit["_score"],
-                )
+        return [
+            RetrievedChunk(
+                content=hit["_source"]["content"],
+                page=hit["_source"]["page"],
+                document_id=hit["_source"]["document_id"],
+                # cosinesimil scores land in [0, 1], higher is closer
+                score=hit["_score"],
             )
-
-        return search_results
+            for hit in response["hits"]["hits"]
+        ]

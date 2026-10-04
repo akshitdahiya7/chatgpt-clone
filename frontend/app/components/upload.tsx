@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -11,6 +10,7 @@ type Message = {
 };
 
 const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/chat`;
+const STREAM_URL = `${API_URL}/stream`;
 
 export default function Home() {
   const [question, setQuestion] = useState("");
@@ -18,8 +18,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
-  const [model, setModel] = useState("gpt-oss:20b");
+  const [model, setModel] = useState("gpt-4o-mini");
   const [topK, setTopK] = useState(5);
   const [temperature, setTemperature] = useState(0.2);
   const [topP, setTopP] = useState(0.9);
@@ -104,20 +105,28 @@ export default function Home() {
       return;
     }
 
-    // Capture current request data before the UI is changed.
     const requestFiles = [...files];
 
-    // Show the user message immediately.
     setMessages((current) => [
       ...current,
-      {
-        role: "user",
-        content: trimmed,
-      },
+      { role: "user", content: trimmed },
     ]);
 
     setLoading(true);
     setError(null);
+    setStatus(
+      requestFiles.length
+        ? "Reading your documents..."
+        : "Searching your documents..."
+    );
+
+    // Clear the composer straight away so the UI feels responsive.
+    setQuestion("");
+    setFiles([]);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
 
     try {
       const formData = new FormData();
@@ -125,125 +134,93 @@ export default function Home() {
       formData.append("question", trimmed);
       formData.append("model", model);
       formData.append("top_k", String(topK));
-      formData.append(
-        "temperature",
-        String(temperature)
-      );
+      formData.append("temperature", String(temperature));
       formData.append("top_p", String(topP));
-      formData.append(
-        "max_tokens",
-        String(maxTokens)
-      );
+      formData.append("max_tokens", String(maxTokens));
 
       requestFiles.forEach((file) => {
         formData.append("files", file, file.name);
       });
 
-      console.log("CHAT REQUEST", {
-        question: trimmed,
-        model,
-        topK,
-        temperature,
-        topP,
-        maxTokens,
-        files: requestFiles.map(
-          (file) => file.name
-        ),
+      const response = await fetch(STREAM_URL, {
+        method: "POST",
+        body: formData,
       });
 
-      const response = await axios.post(
-        API_URL,
-        formData,
-        {
-          timeout: 120000,
-        }
-      );
-
-      console.log("CHAT RESPONSE", response.data);
-
-      const answer =
-        response.data?.response ??
-        response.data?.answer ??
-        response.data?.reply ??
-        "I couldn't find an answer.";
-
-      // Add assistant response after the request succeeds.
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content: String(answer),
-        },
-      ]);
-
-      // Reset request fields only after success.
-      setQuestion("");
-      setFiles([]);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+      if (!response.ok) {
+        throw new Error(
+          `The server returned ${response.status}. Please try again.`
+        );
       }
+
+      if (!response.body) {
+        throw new Error("This browser cannot read streamed responses.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      let answer = "";
+      let started = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        const piece = decoder.decode(value, { stream: true });
+
+        if (!piece) {
+          continue;
+        }
+
+        answer += piece;
+
+        if (started) {
+          // Replace the in-progress assistant message.
+          setMessages((current) => {
+            const next = [...current];
+            next[next.length - 1] = {
+              role: "assistant",
+              content: answer,
+            };
+            return next;
+          });
+        } else {
+          // Add the bubble only once text actually arrives, so a failure
+          // never leaves an empty one behind.
+          started = true;
+          setStatus(null);
+          setMessages((current) => [
+            ...current,
+            { role: "assistant", content: answer },
+          ]);
+        }
+      }
+
+      if (!answer.trim()) {
+        setError("The assistant returned an empty response.");
+      }
+    } catch (err) {
+      console.error("CHAT ERROR", err);
+
+      const message =
+        err instanceof TypeError
+          ? "Unable to connect to the backend."
+          : err instanceof Error
+            ? err.message
+            : "Request failed. Please try again.";
+
+      setError(message);
+    } finally {
+      setLoading(false);
+      setStatus(null);
 
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
-    } catch (err) {
-      console.error("CHAT ERROR", err);
-
-      let message = "Request failed. Please try again.";
-
-      if (axios.isAxiosError(err)) {
-        console.error(
-          "STATUS:",
-          err.response?.status
-        );
-        console.error(
-          "RESPONSE:",
-          err.response?.data
-        );
-        console.error(
-          "MESSAGE:",
-          err.message
-        );
-        console.error(
-          "CODE:",
-          err.code
-        );
-
-        if (err.code === "ERR_NETWORK") {
-          message =
-            "Unable to connect to the backend.";
-        } else if (err.response?.status === 401) {
-          message =
-            "Your session has expired. Please log in again.";
-        } else if (err.response?.status === 403) {
-          message =
-            "You do not have permission to use this service.";
-        } else if (
-          err.response?.data?.detail
-        ) {
-          message = String(
-            err.response.data.detail
-          );
-        } else if (
-          err.response?.data?.message
-        ) {
-          message = String(
-            err.response.data.message
-          );
-        } else if (
-          err.response?.data?.error
-        ) {
-          message = String(
-            err.response.data.error
-          );
-        }
-      }
-
-      // Error is shown separately, not as an assistant message.
-      setError(message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -349,9 +326,9 @@ export default function Home() {
               onChange={setModel}
               disabled={loading}
               options={[
-                ["gpt-oss:20b", "GPT OSS 20B"],
-                ["gpt-oss:120b", "GPT OSS 120B"],
-                ["nemotron-3-ultra", "Nemotron Ultra"],
+                ["gpt-4o-mini", "GPT-4o mini · fast"],
+                ["gpt-4o", "GPT-4o · best"],
+                ["gpt-4.1-mini", "GPT-4.1 mini"],
               ]}
             />
 
@@ -628,7 +605,7 @@ export default function Home() {
 
               {/* LOADING */}
 
-              {loading && (
+              {loading && status && (
                 <div className="flex items-start gap-3">
 
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-black text-xs text-white">
@@ -637,7 +614,9 @@ export default function Home() {
 
                   <div className="rounded-2xl rounded-tl-sm border bg-white px-5 py-4 shadow-sm">
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2.5">
+
+                      <div className="flex items-center gap-1.5">
 
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
 
@@ -656,6 +635,14 @@ export default function Home() {
                             "300ms",
                         }}
                       />
+
+                      </div>
+
+                      {status && (
+                        <span className="text-xs text-gray-400">
+                          {status}
+                        </span>
+                      )}
 
                     </div>
 

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 import httpx
 
 from app.settings import get_settings
@@ -7,7 +9,7 @@ class AIService:
 
     settings = get_settings()
 
-    async def chat(
+    def _payload(
         self,
         question: str,
         model: str,
@@ -15,10 +17,9 @@ class AIService:
         temperature: float,
         top_p: float,
         max_tokens: int,
-        files: list[dict] | None = None,
-    ):
-
-        payload = {
+        files: list[dict] | None,
+    ) -> dict:
+        return {
             "question": question,
             "model": model,
             "top_k": top_k,
@@ -28,13 +29,30 @@ class AIService:
             "files": files,
         }
 
-        async with httpx.AsyncClient(timeout=120) as client:
+    async def chat(self, **kwargs):
+
+        async with httpx.AsyncClient(timeout=300) as client:
 
             response = await client.post(
                 f"{self.settings.ai_service_url}/api/v1/chat",
-                json=payload,
+                json=self._payload(**kwargs),
             )
 
             response.raise_for_status()
 
             return response.json()
+
+    @asynccontextmanager
+    async def stream(self, **kwargs):
+        """Open a streaming response from the AI service.
+
+        The client must stay open while the caller reads, so this is a context
+        manager rather than a plain generator.
+        """
+        async with httpx.AsyncClient(timeout=300) as client, client.stream(
+            "POST",
+            f"{self.settings.ai_service_url}/api/v1/chat/stream",
+            json=self._payload(**kwargs),
+        ) as response:
+            response.raise_for_status()
+            yield response

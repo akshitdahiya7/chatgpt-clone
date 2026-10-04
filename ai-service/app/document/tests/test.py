@@ -21,11 +21,11 @@ def ingest_file():
 
     service = IngestionService()
 
-    count = service.ingest(
+    document_id = service.ingest(
         "https://icrrd.com/public/media/15-05-2021-084550The-Alchemist-Paulo-Coelho.pdf"
     )
 
-    print(f"Ingested {count} chunks")
+    print(f"Ingested as {document_id}")
 
 
 def create_index():
