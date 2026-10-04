@@ -28,10 +28,19 @@ class IngestionService:
         reader = DocumentFactory.get_reader(file_path)
         pages = reader.read(file_path)
 
+        text = "".join(page.text for page in pages)
+
+        # A scanned PDF has pages but no text layer. Without this the upload
+        # succeeds, indexes nothing, and the user never finds out.
+        if not text.strip():
+            raise ValueError(
+                "No readable text found. This looks like a scanned image, "
+                "which needs OCR before it can be indexed."
+            )
+
         # Derive the id from the content, so re-uploading the same file
         # overwrites its chunks instead of adding a duplicate copy.
         if document_id is None:
-            text = "".join(page.text for page in pages)
             document_id = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
 
         # Chunk document

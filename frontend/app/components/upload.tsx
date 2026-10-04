@@ -148,9 +148,20 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `The server returned ${response.status}. Please try again.`
-        );
+        // The backend explains rejections (an unreadable PDF, for example)
+        // in `detail`, which is more useful than the status code.
+        let reason = `The server returned ${response.status}. Please try again.`;
+
+        try {
+          const body = await response.json();
+          if (body?.detail) {
+            reason = String(body.detail);
+          }
+        } catch {
+          // Not JSON; keep the generic message.
+        }
+
+        throw new Error(reason);
       }
 
       if (!response.body) {

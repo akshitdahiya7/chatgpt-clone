@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.rag.service import RAGService
@@ -17,10 +17,19 @@ def prepare(request: dict) -> dict:
 
     user_id = request.get("user_id", "demo-user")
 
-    document_ids = [
-        rag.ingestion_service.ingest(file["sas_url"], user_id=user_id)
-        for file in request.get("files", [])
-    ]
+    document_ids = []
+
+    for file in request.get("files", []):
+        try:
+            document_ids.append(
+                rag.ingestion_service.ingest(file["sas_url"], user_id=user_id)
+            )
+        except ValueError as exc:
+            # Tell the user which file failed and why, rather than a 500.
+            raise HTTPException(
+                status_code=400,
+                detail=f"{file.get('filename', 'file')}: {exc}",
+            ) from exc
 
     return {
         "question": request["question"],

@@ -58,18 +58,25 @@ async def chat_stream(
     # the time the AI service is asked to read them.
     uploaded = await upload_all(files)
 
+    # Raises before any streaming begins if the AI service rejects the
+    # request, so the browser gets a normal error response.
+    client, response = await ai_service.open_stream(
+        question=question,
+        model=model,
+        top_k=top_k,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        files=uploaded,
+    )
+
     async def relay():
-        async with ai_service.stream(
-            question=question,
-            model=model,
-            top_k=top_k,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            files=uploaded,
-        ) as response:
+        try:
             async for piece in response.aiter_text():
                 yield piece
+        finally:
+            await response.aclose()
+            await client.aclose()
 
     return StreamingResponse(
         relay(),

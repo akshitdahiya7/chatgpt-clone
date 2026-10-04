@@ -16,7 +16,7 @@ from pathlib import Path
 
 import boto3
 
-SERVICES = ("gateway", "chat-service", "ai-service")
+SERVICES = ("gateway", "chat-service", "ai-service", "frontend")
 LOCAL_PREFIX = "chatgpt-clone-"
 ENV = Path(__file__).resolve().parent.parent / ".env"
 

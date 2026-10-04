@@ -1,8 +1,17 @@
-from contextlib import asynccontextmanager
-
 import httpx
+from fastapi import HTTPException
 
 from app.settings import get_settings
+
+
+def _detail(body: bytes) -> str:
+    """Pull the message out of a FastAPI error response."""
+    try:
+        import json
+
+        return json.loads(body).get("detail", "The AI service rejected the request.")
+    except Exception:
+        return "The AI service rejected the request."
 
 
 class AIService:
@@ -38,21 +47,40 @@ class AIService:
                 json=self._payload(**kwargs),
             )
 
-            response.raise_for_status()
+            if response.status_code >= 400:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=_detail(response.content),
+                )
 
             return response.json()
 
-    @asynccontextmanager
-    async def stream(self, **kwargs):
-        """Open a streaming response from the AI service.
+    async def open_stream(self, **kwargs):
+        """Start a streaming response and return (client, response).
 
-        The client must stay open while the caller reads, so this is a context
-        manager rather than a plain generator.
+        The status is checked before anything is streamed, so a rejected
+        upload still produces a normal error response rather than an error
+        halfway through a stream the browser has already started reading.
+
+        The caller owns both objects and must close them.
         """
-        async with httpx.AsyncClient(timeout=300) as client, client.stream(
+        client = httpx.AsyncClient(timeout=300)
+
+        request = client.build_request(
             "POST",
             f"{self.settings.ai_service_url}/api/v1/chat/stream",
             json=self._payload(**kwargs),
-        ) as response:
-            response.raise_for_status()
-            yield response
+        )
+
+        response = await client.send(request, stream=True)
+
+        if response.status_code >= 400:
+            body = await response.aread()
+            await response.aclose()
+            await client.aclose()
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=_detail(body),
+            )
+
+        return client, response
