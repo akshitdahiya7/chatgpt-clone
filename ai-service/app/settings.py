@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 128
 
     # Vector store
-    vector_store_provider: str = "opensearch"
+    vector_store_provider: str = "qdrant"  # "qdrant" | "opensearch"
     vector_index_name: str = "documents"
 
     # Drop chunks below this score so unrelated text never reaches the model.
@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # Must match what the embedding provider returns, and cannot change once
     # the index exists. text-embedding-3-small=1536, all-MiniLM-L6-v2=384.
     embedding_dimension: int = 1536
+
+    # Qdrant Cloud: full URL including https://
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
 
     # OpenSearch: host only, without the https:// prefix
     opensearch_host: str = ""
