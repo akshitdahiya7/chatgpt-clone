@@ -33,11 +33,15 @@ class Settings(BaseSettings):
     vector_store_provider: str = "qdrant"  # "qdrant" | "opensearch"
     vector_index_name: str = "documents"
 
-    # Drop chunks below this score so unrelated text never reaches the model.
-    # Measured on this data: questions the documents can answer score 0.59-0.71,
-    # questions they cannot score 0.49-0.55. Retune if you change the embedding
-    # model or the kind of documents.
-    rag_min_score: float = 0.58
+    # Both providers report (1 + cosine) / 2, so 0.5 is cosine 0: drop only
+    # chunks pointing away from the question. Relevance is then judged by the
+    # model, which is told to answer solely from the context and does refuse
+    # when the context does not contain the answer.
+    #
+    # A higher floor looks tempting but blocks real questions: "what is this
+    # document about" scores 0.62 and "what does it say" 0.57, because a
+    # question about a document shares little vocabulary with its contents.
+    rag_min_score: float = 0.50
 
     # Must match what the embedding provider returns, and cannot change once
     # the index exists. text-embedding-3-small=1536, all-MiniLM-L6-v2=384.
