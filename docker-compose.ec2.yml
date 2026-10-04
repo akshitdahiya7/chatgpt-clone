@@ -1,0 +1,42 @@
+# Deployment compose file for EC2: pulls prebuilt images from ECR rather than
+# building on the instance.
+#
+#   docker compose -f docker-compose.ec2.yml pull
+#   docker compose -f docker-compose.ec2.yml up -d
+#
+# Set ECR_REGISTRY first, e.g.
+#   export ECR_REGISTRY=020200817217.dkr.ecr.us-east-1.amazonaws.com
+
+services:
+
+  ai-service:
+    image: ${ECR_REGISTRY}/ai-service:latest
+    env_file: ./ai-service/.env
+    ports:
+      # Loopback only: nothing outside the instance needs this, and the
+      # container holds the OpenAI key.
+      - "127.0.0.1:8002:8002"
+    restart: unless-stopped
+
+  chat-service:
+    image: ${ECR_REGISTRY}/chat-service:latest
+    env_file: ./chat-service/.env
+    environment:
+      AI_SERVICE_URL: http://ai-service:8002
+    ports:
+      # The only port the frontend calls, so the only one open to the world.
+      - "8001:8001"
+    depends_on:
+      - ai-service
+    restart: unless-stopped
+
+  gateway:
+    image: ${ECR_REGISTRY}/gateway:latest
+    env_file: ./gateway/.env
+    environment:
+      CHAT_SERVICE: http://chat-service:8001
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - chat-service
+    restart: unless-stopped
