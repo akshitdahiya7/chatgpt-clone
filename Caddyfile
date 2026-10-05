@@ -8,9 +8,10 @@
 
 	encode gzip
 
-	# API traffic goes to chat-service.
+	# API traffic goes through the gateway, which handles identity and
+	# rate limiting before passing it to chat-service.
 	handle /api/* {
-		reverse_proxy chat-service:8001 {
+		reverse_proxy gateway:8000 {
 			# Flush straight through, otherwise streamed answers arrive in
 			# one lump at the end instead of word by word.
 			flush_interval -1

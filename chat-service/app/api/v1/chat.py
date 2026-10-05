@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Header, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.services.ai_service import AIService
@@ -32,8 +32,12 @@ async def chat(
     top_p: float = Form(0.9),
     max_tokens: int = Form(512),
     files: list[UploadFile] = File(default=[]),
+    # Set by the gateway, which owns identity. Falls back to a shared user so
+    # the service still works when called directly in development.
+    x_user_id: str = Header(default="demo-user"),
 ):
     return await ai_service.chat(
+        user_id=x_user_id,
         question=question,
         model=model,
         top_k=top_k,
@@ -53,6 +57,7 @@ async def chat_stream(
     top_p: float = Form(0.9),
     max_tokens: int = Form(512),
     files: list[UploadFile] = File(default=[]),
+    x_user_id: str = Header(default="demo-user"),
 ):
     # Uploads finish before streaming starts, so the files are in storage by
     # the time the AI service is asked to read them.
@@ -61,6 +66,7 @@ async def chat_stream(
     # Raises before any streaming begins if the AI service rejects the
     # request, so the browser gets a normal error response.
     client, response = await ai_service.open_stream(
+        user_id=x_user_id,
         question=question,
         model=model,
         top_k=top_k,

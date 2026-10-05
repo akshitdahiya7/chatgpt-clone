@@ -53,7 +53,7 @@ services:
       - caddy_config:/config
     depends_on:
       - frontend
-      - chat-service
+      - gateway
     restart: unless-stopped
 
 volumes:

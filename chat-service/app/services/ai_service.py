@@ -27,8 +27,10 @@ class AIService:
         top_p: float,
         max_tokens: int,
         files: list[dict] | None,
+        user_id: str = "demo-user",
     ) -> dict:
         return {
+            "user_id": user_id,
             "question": question,
             "model": model,
             "top_k": top_k,
