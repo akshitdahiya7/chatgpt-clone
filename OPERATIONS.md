@@ -72,6 +72,32 @@ Copy-Item gateway\.env.example gateway\.env
 Open each new `.env` file in your editor and replace the placeholder values
 (OpenAI key, Qdrant URL and key, AWS keys, S3 bucket name).
 
+### Step 3b — generate the session secret
+
+This signs visitors' session cookies. The shipped value is a placeholder, and
+leaving it means anyone could forge a session and read other people's
+documents.
+
+**LAPTOP**
+```powershell
+cd gateway
+```
+**LAPTOP**
+```powershell
+uv run python scripts/set_session_secret.py
+```
+**LAPTOP**
+```powershell
+cd ..
+```
+
+It writes a random value straight into the gateway's config file and
+deliberately does not print it, so the secret never appears in your terminal
+history.
+
+> **IF you ever need to replace it**, add `--force`. Doing so signs every
+> visitor out, which is exactly what you want if the value has leaked.
+
 ### Step 4 — start the backend
 
 **LAPTOP**
@@ -245,8 +271,8 @@ docker compose -f docker-compose.ec2.yml up -d
 docker compose -f docker-compose.ec2.yml ps
 ```
 
-All five must say `running`: `caddy`, `frontend`, `chat-service`,
-`ai-service`, `gateway`.
+All five must say `running`: `caddy`, `gateway`, `chat-service`,
+`ai-service`, `frontend`.
 
 > **IF any says `exited` or `restarting`**, read its log and go to
 > [Problem 2](#problem-2--a-container-will-not-start):
@@ -452,7 +478,31 @@ uv run python -c "from app.document.factory import DocumentFactory; p=r'C:\path\
 
 ---
 
-## Problem 5 — the answers look wrong
+## Problem 5 — "Too many requests"
+
+**Cause:** the gateway allows 20 questions per hour per visitor, so nobody can
+run up the OpenAI bill.
+
+> **IF it is you hitting it while testing**, clearing your browser cookies
+> gives you a fresh session and a fresh allowance.
+
+> **IF you want a different limit**, change `RATE_LIMIT_REQUESTS` in the
+> gateway's config file, copy it to the server, and force-recreate:
+>
+> **LAPTOP**
+> ```powershell
+> .\scripts\copy-env-to-ec2.ps1 -HostIp 34.235.183.74
+> ```
+> **SERVER**
+> ```bash
+> docker compose -f docker-compose.ec2.yml up -d --force-recreate gateway
+> ```
+
+The count is held in memory, so restarting the gateway also clears it.
+
+---
+
+## Problem 6 — the answers look wrong
 
 ### Step 1 — see what is actually stored and retrieved
 
@@ -536,11 +586,36 @@ unrelated.
 |---|---|
 | **chat-service** | Handles the browser: receives uploads, stores files, calls ai-service |
 | **ai-service** | All the AI work: chunking, embeddings, search, prompting, the model |
-| **gateway** | A thin entry point. Deployed but currently unused |
+| **gateway** | The front door: works out who the caller is and limits how often they can ask |
 
 The split means the AI side can change without touching the upload path. That
 paid off in practice: the vector database was swapped from OpenSearch to Qdrant
 without a single change to chat-service.
+
+### Who is asking, and how often
+
+Every request goes through the gateway first.
+
+**Identity.** A first-time visitor has no cookie, so the gateway creates an
+anonymous session and signs it. The signature means a visitor cannot edit the
+cookie to read someone else's documents — a tampered cookie is treated as a
+brand new visitor. That session id becomes the `user_id` used to filter every
+search, so **two people using the site cannot see each other's uploads**.
+
+Sending `Authorization: Bearer <token>` instead gives a named user, configured
+as `token:user` pairs in the gateway's settings.
+
+**Rate limiting.** 20 questions per hour per visitor, answered with `429` and a
+`Retry-After` header. Without it, anyone who found the address could spend the
+OpenAI key without limit.
+
+The gateway passes the request body through untouched, so file uploads work
+without it needing to understand multipart, and it streams the reply back so
+answers still arrive word by word.
+
+> This is isolation, not security. Clearing cookies gives you a fresh identity.
+> That is the right trade for a demo anyone can try; a real product would put a
+> login in front of it.
 
 ### Decisions worth being able to defend
 
@@ -576,10 +651,12 @@ of config switches between them.
 
 ```
 Browser → Caddy (HTTPS, one domain)
-            ├── /api/*  → chat-service → S3 (uploaded files)
-            │                   ↓
-            │              ai-service ──→ Qdrant (vectors)
-            │                        └──→ OpenAI (embeddings + answers)
+            ├── /api/*  → gateway  (who is asking, how often)
+            │                ↓
+            │            chat-service → S3 (uploaded files)
+            │                ↓
+            │            ai-service ──→ Qdrant (vectors)
+            │                      └──→ OpenAI (embeddings + answers)
             └── /*      → frontend (Next.js)
 ```
 
